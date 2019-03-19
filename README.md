@@ -17,9 +17,9 @@ This selection of tools allows to investigate how Scandinavian online news organ
     ```
     python scrape.py
     ```
-1. Generate graph files for analysis:
+1. Generate [Gephi](https://gephi.org/) graph file for analysis:
     ```
-    python visualize.py filename.gexf
+    python visualize.py
     ```
 
 ## Technological background
@@ -64,8 +64,7 @@ Starting with all outlet entries table, the main _scrape.py_ script follows this
 Final word of warning: Increasing the maximum depth of scraping has a tremendous effect on this script's efficiency. That is, a depth as low as `depth = 2` with only one starting outlet can easily yield 1,000 websites.
 
 ### Graph creation
-Run the createGephiGraph.py file to generate `.gexf`-files that can be opened and inspected in [Gephi](https://gephi.org/). Since this builds upon previously collected and stored data, remember to do this after you have collected data.
-
+Starting with all a priori specified outlets, the generated `.gexf` file contains all these outlets as nodes along with their number of internal links as well as the ratio between external and internal links (thus warning about nodes without internal links). The file also contains all external links, adequately weighted, between these outlets. Since this builds upon previously collected and stored data, remember to do this after you have collected data.
 
 ## Context & History
 These tools are part of the [Digital News Agendas in Scandinavia](https://www.uis.no/research-and-phd-studies/research-areas/society-culture-and-religion/digital-news-agendas-in-scandinavia/) project.
