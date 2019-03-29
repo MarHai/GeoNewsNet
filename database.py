@@ -135,7 +135,7 @@ class Sector(base):
     uid = Column(Integer, primary_key=True)
     name = Column(String(150), nullable=False)
     parent_uid = Column(Integer, ForeignKey('sector.uid'), nullable=True)
-    parent = relationship('Sector', back_populates='parent')
+    parent = relationship('Sector', remote_side=[parent_uid])
     outlet = relationship('Outlet', back_populates='sector')
 
     def __repr__(self):
@@ -170,15 +170,18 @@ class Outlet(base):
     scrape = relationship(Scrape, back_populates='outlet')
 
     def __repr__(self):
-        return "<Outlet('%s', name='%s', area='%s')>" % (self.fld, self.name, self.area)
+        return "<Outlet('%s', name='%s', area='%s')>" % (self.url, self.name, self.area)
 
     @staticmethod
     def sanitize_level(level):
         level = level.lower()
-        if level is 'national':
+        if level == 'national':
             return 'National'
-        elif level is 'local/regional':
+        elif level == 'local‎/regional':
             return 'Local/Regional'
+        elif level == '':
+            warnings.warn('No level specified')
+            return ''
         else:
             warnings.warn('Level "%s" unknown (but still put into database)' % level)
             return level
