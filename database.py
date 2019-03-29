@@ -150,7 +150,7 @@ class Outlet(base):
     __tablename__ = 'outlet'
     uid = Column(Integer, primary_key=True)
     name = Column(String(150), nullable=False)
-    country = Column(String(50), nullable=False)
+    area = Column(String(50), nullable=False)
     sector_uid = Column(Integer, ForeignKey('sector.uid'))
     sector = relationship(Sector, back_populates='outlet')
     ownership = Column(String(150), nullable=True)
@@ -184,8 +184,8 @@ class Outlet(base):
             return level
 
     @staticmethod
-    def sanitize_country(country):
-        country = country[0].upper() + country[1:]
-        if country not in ['Denmark', 'Norway', 'Sweden']:
-            country = 'Other: ' + country
-        return country
+    def sanitize_area(area):
+        area = area[0].upper() + area[1:]
+        if area not in ['Denmark', 'Norway', 'Sweden', 'Næstved', 'Stavanger', 'Karlstad']:
+            area = 'Other: ' + area
+        return area
