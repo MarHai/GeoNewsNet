@@ -36,7 +36,10 @@ Change the config file to work with your domain of study. It follows a strict [I
         SHOW SESSION VARIABLES LIKE 'wait_timeout';
         ```
 - Google
-    - *Outlets* specifies the complete (!) URL of the downloadable Google Sheet that holds the outlets. This can be acquired through making the sheet publicly available to everyone with the URL (Google teminology: "share"), copying/pasting the URL, and appending a `&output=csv` at the end.
+    - *Sectors* specifies the complete (!) URL of the downloadable Google Sheet that holds the sectors. This can be acquired through making the sheet publicly available to everyone with the URL (Google teminology: "share"), copying/pasting the URL, and appending a `&output=csv` at the end.
+    - *Sectors_have_headers* defines whether the sectors' first row should be skipped.
+    - *Outlets* specifies the Google-Sheet URL to the outlets. 
+    - *Outlets_have_headers* defines whether the outlets' first row should be skipped.
 - Scraper
     - *UserAgent* depicts the user-agent string to use for scraping.
     - *Maintainer* is the name of the person in charge, pushed as "from" via any scraping request's header.
@@ -48,6 +51,7 @@ Change the config file to work with your domain of study. It follows a strict [I
 All database communication is handled through [SQLAlchemy](https://docs.sqlalchemy.org/en/latest/), meaning that you can put a variety of SQL-based database infrastructures below it. Default's to MySQL, however.
 
 The main storage, then, consists of three tables:
+- *Sector* specifies the hierarchical tree structure of sectors to which outlets belong.
 - *Outlet* holds the later-to-be-visualized starting points (i.e., nodes) including their geographical positions and an initial URL.
 - *Scrape* holds one entry per actual website scraping process. The time it takes for a website to be loaded is logged into this table as well (_seconds_elapsed_). Initial scrapes are also linked to their corresponding outlet elements.
 - *Link* finally is the largest table and holds all connections (i.e., edges). It also determines whether a connection is internal or external as well as whether scraping its target resulted in errors (_erroneous_scrapes_).
