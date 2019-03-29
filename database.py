@@ -6,6 +6,7 @@ from tld.exceptions import TldBadUrl, TldDomainNotFound
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 import requests
+import warnings
 
 base = declarative_base()
 
@@ -129,20 +130,40 @@ class Link(base):
         return get_tld(url)
 
 
+class Sector(base):
+    __tablename__ = 'sector'
+    uid = Column(Integer, primary_key=True)
+    name = Column(String(150), nullable=False)
+    parent_uid = Column(Integer, ForeignKey('sector.uid'), nullable=True)
+    parent = relationship('Sector', back_populates='parent')
+    outlet = relationship('Outlet', back_populates='sector')
+
+    def __repr__(self):
+        return "<Sector('%s', parent='%s')>" % (self.name, self.parent.name)
+
+    @staticmethod
+    def find_sector(sector):
+        return None
+
+
 class Outlet(base):
     __tablename__ = 'outlet'
     uid = Column(Integer, primary_key=True)
     name = Column(String(150), nullable=False)
-    owner = Column(String(150))
-    publisher = Column(String(150))
-    city = Column(String(80))
     country = Column(String(50), nullable=False)
-    area = Column(String(50))
-    reach = Column(String(30))
-    latitude = Column(Numeric(10, 8), nullable=False)
-    longitude = Column(Numeric(11, 8), nullable=False)
-    is_composite = Column(Boolean, default=False, nullable=False)
-    url = Column(Text, nullable=False)
+    sector_uid = Column(Integer, ForeignKey('sector.uid'))
+    sector = relationship(Sector, back_populates='outlet')
+    ownership = Column(String(150), nullable=True)
+    level = Column(String(30))
+    reach = Column(Integer, nullable=True)
+    reach_unit = Column(String(50), nullable=True)
+    founding_year = Column(Integer, nullable=True)
+    revenue = Column(String(50), nullable=True)
+    topic = Column(String(50), nullable=True)
+    note = Column(Text, nullable=True)
+    latitude = Column(Numeric(10, 8), nullable=True)
+    longitude = Column(Numeric(11, 8), nullable=True)
+    url = Column(Text, nullable=False, unique=True)
     fld = Column(String(250), index=True, nullable=False)
     tld = Column(String(7))
     scrape_uid = Column(Integer, ForeignKey('scrape.uid'))
@@ -150,6 +171,17 @@ class Outlet(base):
 
     def __repr__(self):
         return "<Outlet('%s', name='%s', country='%s')>" % (self.fld, self.name, self.country)
+
+    @staticmethod
+    def sanitize_level(level):
+        level = level.lower()
+        if level is 'national':
+            return 'National'
+        elif level is 'local/regional':
+            return 'Local/Regional'
+        else:
+            warnings.warn('Level "%s" unknown (but still put into database)' % level)
+            return level
 
     @staticmethod
     def sanitize_country(country):
