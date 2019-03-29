@@ -6,7 +6,8 @@ import traceback
 from sqlalchemy import create_engine, inspect
 from sqlalchemy.orm import sessionmaker, scoped_session
 import csv
-from database import base, Outlet, Scrape, Link
+from database import base, Outlet, Scrape, Link, Sector
+from tld.utils import update_tld_names
 
 
 def get_config(ini_file='config.ini'):
@@ -48,6 +49,49 @@ def get_database(engine):
         die_with_error('Database session could not be initiated')
 
 
+def import_sectors(config, db):
+    sheet = config.get('Google', 'sectors')
+    if sheet is not '':
+        print('- retrieving sectors from Google Drive %s' % sheet)
+        try:
+            response = requests.get(sheet)
+            if response.status_code == 200:
+                csv_raw = response.content.decode('utf-8')
+                csv_list = csv_raw.splitlines()
+                csv_data = csv.DictReader(csv_list,
+                                          fieldnames=['parent', 'name'],
+                                          dialect=csv.Sniffer().sniff(csv_list[0]))
+                if config.get('Google', 'sectors_have_headers') == '1':
+                    next(csv_data, None)
+                    print('- skipping header row')
+                counter_new = 0
+                counter_update = 0
+                for entry in csv_data:
+                    sector_name = entry['name'].strip()
+                    temp_sector = db.query(Sector).filter(Sector.name == sector_name).one_or_none()
+                    if temp_sector is None:
+                        temp_sector = Sector(name=sector_name)
+                        db.add(temp_sector)
+                        counter_new = counter_new + 1
+                    else:
+                        counter_update = counter_update + 1
+                    if entry['parent'] != '':
+                        parent_name = entry['parent'].strip()
+                        parent = db.query(Sector).filter(Sector.name == parent_name).one_or_none()
+                        if parent is None:
+                            print('- parent specified (%s) but not found in database, hence attaching to root level' %
+                                  parent_name)
+                        else:
+                            temp_sector.parent_uid = parent.uid
+                    db.commit()
+                print('- imported %d new sectors' % counter_new)
+                print('- updated %d sectors' % counter_update)
+            else:
+                die_with_error('Google Drive returned unexpected status code %d' % response.status_code)
+        except:
+            die_with_error('Google Drive could not be contacted properly')
+
+
 def import_outlets(config, db):
     sheet = config.get('Google', 'outlets')
     if sheet is not '':
@@ -58,30 +102,44 @@ def import_outlets(config, db):
                 csv_raw = response.content.decode('utf-8')
                 csv_list = csv_raw.splitlines()
                 csv_data = csv.DictReader(csv_list,
-                                          fieldnames=['url', 'is_composite', 'latitude', 'longitude', 'area', 'name',
-                                                      'reach', 'city', 'country', 'owner', 'publisher'],
+                                          fieldnames=['url', 'name', 'area',
+                                                      'level', 'sector', 'subsector', 'owner',
+                                                      'reach', 'reach_unit', 'founding_year', 'revenue', 'topic',
+                                                      'notes',
+                                                      'latitude', 'longitude'],
                                           dialect=csv.Sniffer().sniff(csv_list[0]))
-                counter = 0
+                if config.get('Google', 'outlets_have_headers') == '1':
+                    next(csv_data, None)
+                    print('- skipping header row')
+                counter_new = 0
+                counter_update = 0
                 for entry in csv_data:
-                    temp_outlet = Outlet(
-                        name=entry['name'],
-                        owner=entry['owner'],
-                        publisher=entry['publisher'],
-                        city=entry['city'],
-                        country=Outlet.sanitize_country(entry['country']),
-                        area=entry['area'],
-                        reach=entry['reach'],
-                        latitude=float(entry['latitude']),
-                        longitude=float(entry['longitude']),
-                        is_composite=(entry['is_composite'] is 'yes'),
-                        url=Link.sanitize_url(entry['url'], base_url=''),
-                        fld=Link.extract_fld(entry['url']),
-                        tld=Link.extract_tld(entry['url'])
-                    )
-                    db.add(temp_outlet)
-                    counter = counter + 1
+                    outlet_url = Link.sanitize_url(entry['url'].strip(), base_url='')
+                    temp_outlet = db.query(Outlet).filter(Outlet.url == outlet_url).one_or_none()
+                    if temp_outlet is None:
+                        temp_outlet = Outlet(url=outlet_url)
+                        db.add(temp_outlet)
+                        counter_new = counter_new + 1
+                    else:
+                        counter_update = counter_update + 1
+                    temp_outlet.name = entry['name'].strip()
+                    temp_outlet.area = Outlet.sanitize_area(entry['area'])
+                    temp_outlet.sector = Sector.find_sector(entry['subsector'])
+                    temp_outlet.ownership = entry['owner'].strip()
+                    temp_outlet.level = Outlet.sanitize_level(entry['level'])
+                    temp_outlet.reach = int(float(entry['reach'])) if entry['reach'] != '' else None
+                    temp_outlet.reach_unit = entry['reach_unit'].strip() if entry['reach_unit'] != '' else None
+                    temp_outlet.founding_year = int(entry['founding_year']) if entry['founding_year'] != '' else None
+                    temp_outlet.revenue = entry['revenue'].strip() if entry['revenue'] != '' else None
+                    temp_outlet.topic = entry['topic'].strip() if entry['topic'] != '' else None
+                    temp_outlet.note = entry['notes'].strip() if entry['notes'] != '' else None
+                    temp_outlet.latitude = float(entry['latitude']) if entry['latitude'] != '' else None
+                    temp_outlet.longitude = float(entry['longitude']) if entry['longitude'] != '' else None
+                    temp_outlet.fld = Link.extract_fld(outlet_url)
+                    temp_outlet.tld = Link.extract_tld(outlet_url)
                 db.commit()
-                print('- imported %d outlets' % counter)
+                print('- imported %d new outlets' % counter_new)
+                print('- updated %d outlets' % counter_update)
             else:
                 die_with_error('Google Drive returned unexpected status code %d' % response.status_code)
         except:
@@ -138,6 +196,10 @@ if __name__ == '__main__':
     config = get_config()
     print('---------')
 
+    print('Updating top-level-domain list')
+    update_tld_names()
+    print('---------')
+
     print('Checking database')
     engine = get_engine(config)
     db = get_database(engine)
@@ -147,32 +209,8 @@ if __name__ == '__main__':
         base.metadata.create_all(engine)
     else:
         print('- database already contains tables, so nothing is created')
-    outlet_count = 0
-    try:
-        outlet_count = db.query(Outlet).count()
-    except:
-        print('- outlet table not found')
-    if outlet_count == 0:
-        print('- no outlets found, importing outlets now ...')
-        # @todo: import_outlets(config, db)
-        db.add(Outlet(
-            name='Haram, Sandøy, Skodje',
-            owner='Amedia',
-            publisher='ScandMedia',
-            city='Møre og Romsdal',
-            country=Outlet.sanitize_country('Norway'),
-            area='Nordre',
-            reach='local',
-            latitude=62.595778,
-            longitude=6.444845,
-            is_composite=False,
-            url=Link.sanitize_url('http://nordrenett.no/'),
-            fld=Link.extract_fld('http://nordrenett.no/'),
-            tld=Link.extract_tld('http://nordrenett.no/')
-        ))
-        db.commit()
-    else:
-        print('- %d outlets found, nothing imported' % outlet_count)
+    import_sectors(config, db)
+    import_outlets(config, db)
     print('---------')
 
     print('Checking scraper')
