@@ -163,14 +163,14 @@ class Outlet(base):
     note = Column(Text, nullable=True)
     latitude = Column(Numeric(10, 8), nullable=True)
     longitude = Column(Numeric(11, 8), nullable=True)
-    url = Column(Text, nullable=False, unique=True)
+    url = Column(Text, nullable=False)
     fld = Column(String(250), index=True, nullable=False)
     tld = Column(String(7))
     scrape_uid = Column(Integer, ForeignKey('scrape.uid'))
     scrape = relationship(Scrape, back_populates='outlet')
 
     def __repr__(self):
-        return "<Outlet('%s', name='%s', country='%s')>" % (self.fld, self.name, self.country)
+        return "<Outlet('%s', name='%s', area='%s')>" % (self.fld, self.name, self.area)
 
     @staticmethod
     def sanitize_level(level):
