@@ -34,6 +34,7 @@ class Scraper(threading.Thread):
     def scrape(self, url):
         """Requests url and extracts links. A Scrape and several 1:n-linked Link objects are created.
         For every Link, existent target Scrape objects are located and incorporated.
+        A link is considered "internal" if the first-level domains of origin and target are equal.
         For the new Scrape, existent Link objects targeting this Scrape are located and updated.
         Returns the new Scrape object or False if an error occured.
         """
