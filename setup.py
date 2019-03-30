@@ -73,20 +73,24 @@ def import_sectors(config, db):
                 for entry in csv_data:
                     sector_name = entry['name'].strip()
                     temp_sector = db.query(Sector).filter(Sector.name == sector_name).one_or_none()
+                    temp_parent = None
+                    if entry['parent'] != '':
+                        temp_parent = db.query(Sector).filter(Sector.name == entry['parent'].strip()).one_or_none()
+                        if temp_parent is None:
+                            print('- parent "%s" not found, sector attached to root level' % entry['parent'])
                     if temp_sector is None:
                         temp_sector = Sector(name=sector_name)
+                        if temp_parent is not None:
+                            temp_sector.parent_uid = temp_parent.uid
                         db.add(temp_sector)
                         counter_new = counter_new + 1
                     else:
-                        counter_update = counter_update + 1
-                    if entry['parent'] != '':
-                        parent_name = entry['parent'].strip()
-                        parent = db.query(Sector).filter(Sector.name == parent_name).one_or_none()
-                        if parent is None:
-                            print('- parent specified (%s) but not found in database, hence attaching to root level' %
-                                  parent_name)
-                        else:
-                            temp_sector.parent_uid = parent.uid
+                        if temp_parent is None and temp_sector.parent_uid is not None:
+                            temp_sector.parent_uid = None
+                            counter_update = counter_update + 1
+                        elif temp_parent is not None and temp_parent.uid is not temp_sector.parent_uid:
+                            temp_sector.parent_uid = temp_parent.uid
+                            counter_update = counter_update + 1
                     db.commit()
                 print('- imported %d new sectors' % counter_new)
                 print('- updated %d sectors' % counter_update)
@@ -120,6 +124,9 @@ def import_outlets(config, db):
                 for entry in csv_data:
                     outlet_url = Link.sanitize_url(entry['url'].strip(), base_url='')
                     temp_outlet = db.query(Outlet).filter(Outlet.url == outlet_url).one_or_none()
+                    temp_sector = None
+                    if entry['subsector'] != '':
+                        temp_sector = db.query(Sector).filter(Sector.name == entry['subsector']).one_or_none()
                     if temp_outlet is None:
                         temp_outlet = Outlet(url=outlet_url)
                         db.add(temp_outlet)
@@ -128,7 +135,8 @@ def import_outlets(config, db):
                         counter_update = counter_update + 1
                     temp_outlet.name = entry['name'].strip()
                     temp_outlet.area = Outlet.sanitize_area(entry['area'])
-                    temp_outlet.sector = Sector.find_sector(entry['subsector'])
+                    if temp_sector is not None:
+                        temp_outlet.sector_uid = temp_sector.uid
                     temp_outlet.ownership = entry['owner'].strip()
                     temp_outlet.level = Outlet.sanitize_level(entry['level'])
                     temp_outlet.reach = int(float(entry['reach'])) if entry['reach'] != '' else None
