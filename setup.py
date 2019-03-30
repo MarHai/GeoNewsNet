@@ -26,7 +26,8 @@ def get_engine(config):
                 '://' + config.get('Database', 'user', fallback='root') + \
                 ':' + config.get('Database', 'password', fallback='password') + \
                 '@' + config.get('Database', 'host', fallback='localhost') + \
-                '/' + config.get('Database', 'database', fallback='geonewsnet')
+                '/' + config.get('Database', 'database', fallback='geonewsnet') + \
+                '?charset=utf8'
     print('- connecting to %s' % connector)
     database_timeout = -1
     try:
@@ -36,7 +37,7 @@ def get_engine(config):
     except:
         database_timeout = -1
     try:
-        return create_engine(connector, encoding='utf-8', pool_recycle=database_timeout)
+        return create_engine(connector, encoding='utf8', pool_recycle=database_timeout)
     except:
         die_with_error('Database engine could not be created')
 
@@ -44,7 +45,10 @@ def get_engine(config):
 def get_database(engine):
     try:
         session_factory = sessionmaker(bind=engine)
-        return scoped_session(session_factory)
+        db = scoped_session(session_factory)
+        db.execute('SET NAMES "UTF8"')
+        db.execute('SET CHARACTER SET "UTF8"')
+        return db
     except:
         die_with_error('Database session could not be initiated')
 
@@ -136,7 +140,6 @@ def import_outlets(config, db):
                     temp_outlet.latitude = float(entry['latitude']) if entry['latitude'] != '' else None
                     temp_outlet.longitude = float(entry['longitude']) if entry['longitude'] != '' else None
                     temp_outlet.fld = Link.extract_fld(outlet_url)
-                    temp_outlet.tld = Link.extract_tld(outlet_url)
                 db.commit()
                 print('- imported %d new outlets' % counter_new)
                 print('- updated %d outlets' % counter_update)

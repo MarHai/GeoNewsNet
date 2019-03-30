@@ -17,6 +17,7 @@ class ScrapeError(Exception):
 
 class Scrape(base):
     __tablename__ = 'scrape'
+    __table_args__ = {'mysql_charset': 'utf8', 'mysql_collate': 'utf8_general_ci'}
     uid = Column(Integer, primary_key=True)
     created = Column(DateTime, default=func.now())
     url_started = Column(Text, nullable=False)
@@ -91,6 +92,7 @@ class Scrape(base):
 
 class Link(base):
     __tablename__ = 'link'
+    __table_args__ = {'mysql_charset': 'utf8', 'mysql_collate': 'utf8_general_ci'}
     uid = Column(Integer, primary_key=True)
     url_origin = Column(Text, nullable=False)
     fld_origin = Column(String(250), nullable=False)
@@ -125,13 +127,10 @@ class Link(base):
     def extract_fld(url):
         return get_fld(url)
 
-    @staticmethod
-    def extract_tld(url):
-        return get_tld(url)
-
 
 class Sector(base):
     __tablename__ = 'sector'
+    __table_args__ = {'mysql_charset': 'utf8', 'mysql_collate': 'utf8_general_ci'}
     uid = Column(Integer, primary_key=True)
     name = Column(String(150), nullable=False)
     parent_uid = Column(Integer, ForeignKey('sector.uid'), nullable=True)
@@ -139,15 +138,15 @@ class Sector(base):
     outlet = relationship('Outlet', back_populates='sector')
 
     def __repr__(self):
-        return "<Sector('%s', parent='%s')>" % (self.name, self.parent.name)
-
-    @staticmethod
-    def find_sector(sector):
-        return None
+        if self.parent_uid is None:
+            return "<Sector('%s', root element)>" % self.name
+        else:
+            return "<Sector('%s', parent='%s')>" % (self.name, self.parent.name)
 
 
 class Outlet(base):
     __tablename__ = 'outlet'
+    __table_args__ = {'mysql_charset': 'utf8', 'mysql_collate': 'utf8_general_ci'}
     uid = Column(Integer, primary_key=True)
     name = Column(String(150), nullable=False)
     area = Column(String(50), nullable=False)
@@ -165,7 +164,6 @@ class Outlet(base):
     longitude = Column(Numeric(11, 8), nullable=True)
     url = Column(Text, nullable=False)
     fld = Column(String(250), index=True, nullable=False)
-    tld = Column(String(7))
     scrape_uid = Column(Integer, ForeignKey('scrape.uid'))
     scrape = relationship(Scrape, back_populates='outlet')
 
