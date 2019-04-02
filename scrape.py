@@ -11,11 +11,12 @@ class Scraper(threading.Thread):
         threading.Thread.__init__(self)
         self._queue = queue
         self._config = config
+        self._logfile = None
         # to be thread-safe, we use a fresh scoped session, which gets initiated here
         self._db = get_database(db_engine)
 
     def run(self):
-        print('  - worker #%d set up' % threading.get_ident())
+        self._logfile = log('  - worker #%d set up' % threading.get_ident())
         while True:
             content = self._queue.get()
             if isinstance(content, str) and content == 'quit':
@@ -102,44 +103,54 @@ def recursively_add_links_to_queue(queue, current_level, links_from_current_leve
                 links = db.query(Link).filter(Link.scrape_origin_uid == link.scrape_target_uid).all()
                 recursively_add_links_to_queue(queue, current_level + 1, links, max_depth)
     if links_actually_added_to_queue > 0:
-        print('  - added %d not-yet-visited out of %d potential link targets on level %d to the list' %
-              (links_actually_added_to_queue, len(links_from_current_level), current_level))
+        log('  - added %d not-yet-visited out of %d potential link targets on level %d to the list' %
+            (links_actually_added_to_queue, len(links_from_current_level), current_level))
+
+
+def log(msg, file=None):
+    if file is None:
+        filename = 'geonewsnet.log'
+        file = open(filename, 'a')
+        log('%s opened as logfile' % filename, file)
+    file.write(msg + '\n')
+    print(msg)
+    return file
 
 
 if __name__ == '__main__':
     t0 = time()
 
-    print('GeoNewsNet v2')
-    print('https://github.com/MarHai/GeoNewsNet')
-    print('(c) 2019 by Mario Haim <mario@haim.it>')
-    print('---------')
+    logfile = log('GeoNewsNet v2')
+    log('https://github.com/MarHai/GeoNewsNet', logfile)
+    log('(c) 2019 by Mario Haim <mario@haim.it>', logfile)
+    log('---------', logfile)
 
     config = get_config()
     db_engine = get_engine(config)
     db = get_database(db_engine)
     queue = Queue()
     threads = []
-    print('---------')
+    log('---------', logfile)
 
     workers = int(config.get('Scraper', 'threads', fallback=4))
     max_depth = int(config.get('Scraper', 'depth', fallback=1))
 
     for round in range(max_depth+1):
-        print(':: Round %d of %d' % (round+1, max_depth+1))
+        log(':: Round %d of %d' % (round+1, max_depth+1), logfile)
 
-        print('  Creating %d parallel scrapers' % workers)
+        log('  Creating %d parallel scrapers' % workers, logfile)
         for i in range(workers):
             worker = Scraper(queue, config, db_engine)
             worker.start()
             threads.append(worker)
-        print('  ---')
+        log('  ---', logfile)
 
-        print('  Collecting all URLs to be scraped')
+        log('  Collecting all URLs to be scraped', logfile)
         outlets = db.query(Outlet).filter(Outlet.scrape_uid.is_(None)).all()
         for outlet in outlets:
             queue.put(outlet)
         if len(outlets) > 0:
-            print('  - added %d outlets (nodes) to the list' % len(outlets))
+            log('  - added %d outlets (nodes) to the list' % len(outlets), logfile)
 
         # for all Outlet-related Scrape objects (level=1), start the recursive process for all Link objects (level=2)
         if max_depth > 1:
@@ -149,7 +160,7 @@ if __name__ == '__main__':
                 Outlet.scrape_uid.isnot(None)
             ).all()
             recursively_add_links_to_queue(queue, 2, links, max_depth)
-        print('  ---')
+        log('  ---', logfile)
 
         # @todo: check for unfinished/improper scrapes with (a) less sub scrapes than links and (b) less than x (10) links
 
@@ -157,30 +168,41 @@ if __name__ == '__main__':
             queue.put('quit')
         for worker in threads:
             worker.join()
-        print('  ---')
-    print('---------')
+        log('  ---', logfile)
+    log('---------', logfile)
 
-    print('Everything done, here are some descriptive statistics:')
+    log('Everything done, here are some descriptive statistics:', logfile)
     scrape_total = db.query(func.count(Scrape.uid)).one()[0]
     scrape_successful = db.query(func.count(Scrape.uid)).filter(Scrape.status_code == 200).one()[0]
-    print('- %d websites scraped, %d of which (%d%%) were successful (i.e., status code 200)' %
-          (scrape_total, scrape_successful, 100*scrape_successful/scrape_total))
+    log('- %d websites scraped, %d of which (%d%%) were successful (i.e., status code 200)' %
+        (scrape_total, scrape_successful, (0 if scrape_total == 0 else 100*scrape_successful/scrape_total)),
+        logfile)
     scrape_host_result = db.query(func.count(Link.uid)).group_by(Link.fld_origin)
-    scrape_min_documents = min(count[0] for count in scrape_host_result.all())
-    scrape_max_documents = max(count[0] for count in scrape_host_result.all())
-    print('- %d hosts scraped, containing between %d and %d documents' %
-          (scrape_host_result.count(), scrape_min_documents, scrape_max_documents))
-    links_internal = db.query(func.count(Link.uid)).filter(Link.is_internal).one()[0]
-    links_external = db.query(func.count(Link.uid)).filter(Link.is_internal.is_(False)).one()[0]
+    if scrape_host_result.count() == 0:
+        log('- no hosts scraped', logfile)
+    else:
+        scrape_min_documents = min(count[0] for count in scrape_host_result.all())
+        scrape_max_documents = max(count[0] for count in scrape_host_result.all())
+        log('- %d hosts scraped, containing between %d and %d documents' %
+            (scrape_host_result.count(), scrape_min_documents, scrape_max_documents),
+            logfile)
+    try:
+        links_internal = db.query(func.count(Link.uid)).filter(Link.is_internal).one()[0]
+        links_external = db.query(func.count(Link.uid)).filter(Link.is_internal.is_(False)).one()[0]
+    except:
+        links_internal = 0
+        links_external = 0
     links_total = links_internal + links_external
-    print('- %d links collected, %d of which are external (%d%%)' %
-          (links_total, links_external, (100*links_external/links_total)))
+    log('- %d links collected, %d of which are external (%d%%)' %
+        (links_total, links_external, (0 if links_total == 0 else 100*links_external/links_total)),
+        logfile)
     links_outlet = db.query(func.count(Link.uid)).outerjoin(Outlet, Link.scrape_target_uid == Outlet.scrape_uid).filter(
         Link.is_internal.is_(False),
         Link.scrape_target_uid.isnot(None)
     ).one()[0]
-    print('- %d external links (%d%% out of %d external links) link to pre-configured outlets' %
-          (links_outlet, (100*links_outlet/links_external), links_external))
-    print('---------')
+    log('- %d external links (%d%% out of %d external links) link to pre-configured outlets' %
+        (links_outlet, (0 if links_external == 0 else 100*links_outlet/links_external), links_external),
+        logfile)
+    log('---------', logfile)
 
     print('Done in %.2f seconds' % (time() - t0))
