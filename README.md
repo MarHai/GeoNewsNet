@@ -72,6 +72,7 @@ Starting with all outlet entries table, the main _scrape.py_ script follows this
     - Store every website retrieval inside the *Scrape* database table.
     - Store every extracted link inside the *Link* database table. 
 - Repeat this process for a total of `maximum depth of scraping + 1` times.
+- At the end of this process, an email is being sent informing about the state of progress.
 
 Final word of warning: Increasing the maximum depth of scraping has a tremendous effect on this script's efficiency. That is, a depth as low as `depth = 2` with only one starting outlet can easily yield 1,000 websites.
 

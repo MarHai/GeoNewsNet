@@ -1,5 +1,5 @@
 from time import time
-from setup import get_config, get_engine, get_database, get_browser_header
+from setup import get_config, get_engine, get_database, get_browser_header, send_email
 import threading
 from queue import Queue
 from database import Outlet, Scrape, Link, ScrapeError
@@ -205,4 +205,11 @@ if __name__ == '__main__':
         logfile)
     log('---------', logfile)
 
-    print('Done in %.2f seconds' % (time() - t0))
+    timediff = time() - t0
+    log('Done in %.2f seconds' % timediff, logfile)
+    send_email(config,
+               '[GeoNewsNet] Scrape Process Finished',
+               ('Hi,\n\nthe running scrape process has just finished after %.2f seconds.\n' +
+                'Please find the full logfile attached.\n\n' +
+                'Thanks for using our tools,\nMario\n') % timediff,
+               [logfile.name])
