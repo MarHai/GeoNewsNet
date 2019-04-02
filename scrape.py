@@ -144,7 +144,6 @@ if __name__ == '__main__':
             worker = Scraper(queue, config, db_engine)
             worker.start()
             threads.append(worker)
-        log('  ---', logfile)
 
         log('  Collecting all URLs to be scraped', logfile)
         outlets = db.query(Outlet).filter(Outlet.scrape_uid.is_(None)).all()
@@ -161,15 +160,11 @@ if __name__ == '__main__':
                 Outlet.scrape_uid.isnot(None)
             ).all()
             recursively_add_links_to_queue(queue, 2, links, max_depth)
-        log('  ---', logfile)
-
-        # @todo: check for unfinished/improper scrapes with (a) less sub scrapes than links and (b) less than x (10) links
 
         for worker in threads:
             queue.put('quit')
         for worker in threads:
             worker.join()
-        log('  ---', logfile)
     log('---------', logfile)
 
     log('Everything done, here are some descriptive statistics:', logfile)
