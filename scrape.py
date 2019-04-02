@@ -4,6 +4,7 @@ import threading
 from queue import Queue
 from database import Outlet, Scrape, Link, ScrapeError
 from sqlalchemy import or_, func
+from statistics import mean, stdev
 
 
 class Scraper(threading.Thread):
@@ -199,6 +200,13 @@ if __name__ == '__main__':
     log('- %d external links (%d%% out of %d external links) link to pre-configured outlets' %
         (links_outlet, (0 if links_external == 0 else 100*links_outlet/links_external), links_external),
         logfile)
+    scrape_link_result = db.query(func.count(Link.uid)).group_by(Link.scrape_origin_uid)
+    if scrape_link_result.count() > 1:
+        mean_number_of_links = mean(count[0] for count in scrape_link_result.all())
+        sd_number_of_links = stdev(count[0] for count in scrape_link_result.all())
+        log('- on average, scrapes resulted in M = %.1f links (SD = %.1f)' % (mean_number_of_links, sd_number_of_links))
+        below_10_number_of_links = sum((1 if count[0] < 10 else 0) for count in scrape_link_result.all())
+        log('- %d scrapes have less than 10 links' % below_10_number_of_links)
     log('---------', logfile)
 
     timediff = time() - t0
