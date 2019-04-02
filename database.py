@@ -125,7 +125,11 @@ class Link(base):
 
     @staticmethod
     def extract_fld(url):
-        return get_fld(url)
+        try:
+            return get_fld(url)
+        except TldBadUrl:
+            warnings.warn('First-level domain from URL "%s" could not be extracted (bad URL)' % url)
+            return ''
 
 
 class Sector(base):

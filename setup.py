@@ -128,6 +128,9 @@ def import_outlets(config, db):
                 counter_update = 0
                 for entry in csv_data:
                     outlet_url = Link.sanitize_url(entry['url'].strip(), base_url='')
+                    if outlet_url == '':
+                        print('- urgs, URL "%s" could not be parsed correctly and was skipped' % entry['url'])
+                        continue
                     temp_outlet = db.query(Outlet).filter(Outlet.url == outlet_url).one_or_none()
                     temp_sector = None
                     if entry['subsector'] != '':
