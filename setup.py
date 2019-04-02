@@ -8,10 +8,16 @@ from sqlalchemy.orm import sessionmaker, scoped_session
 import csv
 from database import base, Outlet, Scrape, Link, Sector
 from tld.utils import update_tld_names
+import smtplib
+import ssl
+from email import encoders
+from email.mime.base import MIMEBase
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 
 
 def get_config(ini_file='config.ini'):
-    config = configparser.ConfigParser()
+    config = configparser.RawConfigParser()
     print('- reading %s' % ini_file)
     try:
         config.read(ini_file)
@@ -164,6 +170,54 @@ def get_browser_header(config):
     }
 
 
+def get_mailer(config):
+    use_tls = True if config.get('Email', 'tls', fallback=0) else False
+    host = config.get('Email', 'host')
+    port = int(config.get('Email', 'port', fallback=(465 if use_tls else 25)))
+    context = ssl.create_default_context()
+    server = None
+    try:
+        if use_tls:
+            print('- connecting to %s using TLS via port %d' % (host, port))
+            server = smtplib.SMTP(host, port)
+            server.starttls(context=context)
+        else:
+            print('- connecting to %s via port %d' % (host, port))
+            server = smtplib.SMTP_SSL(host, port, context=context)
+        server.login(config.get('Email', 'user'), config.get('Email', 'password'))
+    except:
+        die_with_error('connection to SMTP server failed')
+    return server
+
+
+def send_email(config, subject, message, attachments=None):
+    sender = config.get('Email', 'sender')
+    recipient = config.get('Email', 'recipient')
+    print('- attempting to send an email ("%s") to %s' % (subject, recipient))
+    msg = MIMEMultipart()
+    msg['From'] = sender
+    msg['To'] = recipient
+    msg['Subject'] = subject
+    msg.attach(MIMEText(message, 'plain'))
+    if attachments is not None:
+        for attachment in attachments:
+            try:
+                with open(attachment, 'rb') as file:
+                    part = MIMEBase('application', 'octet-stream')
+                    part.set_payload(file.read())
+                    encoders.encode_base64(part)
+                    part.add_header('Content-Disposition', 'attachment; filename=%s' % attachment)
+                    msg.attach(part)
+                    print('- attaching "%s" to the email' % attachment)
+            except:
+                print('- "%s" could not be attached to email' % attachment)
+    try:
+        mailer = get_mailer(config)
+        mailer.sendmail(sender, recipient, msg.as_string())
+    except:
+        die_with_error('email could not be sent')
+
+
 def check_request(url='https://haim.it'):
     print('- requesting %s' % url)
     header = get_browser_header(config)
@@ -207,6 +261,18 @@ if __name__ == '__main__':
     config = get_config()
     print('---------')
 
+    print('Checking SMTP/email setup')
+    send_email(config, '[GeoNewsNet] Test Message from Setup Process',
+               'Hi,\n\nthis is just a test message to let you know that the email sending actually works!\n' +
+               'Please note the completely uninteresting file attached.\n\n' +
+               'Thanks for using our tools,\nMario\n',
+               ['requirements.txt'])
+    print('---------')
+
+    print('Checking scraper')
+    check_request()
+    print('---------')
+
     print('Updating top-level-domain list')
     update_tld_names()
     print('---------')
@@ -222,10 +288,6 @@ if __name__ == '__main__':
         print('- database already contains tables, so nothing is created')
     import_sectors(config, db)
     import_outlets(config, db)
-    print('---------')
-
-    print('Checking scraper')
-    check_request()
     print('---------')
 
     print('Done in %.2f seconds' % (time() - t0))

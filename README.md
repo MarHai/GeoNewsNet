@@ -35,6 +35,14 @@ Change the config file to work with your domain of study. It follows a strict [I
         ```
         SHOW SESSION VARIABLES LIKE 'wait_timeout';
         ```
+- Email
+    - *Host* is the address of the SMTP (!) server.
+    - *Port* represents the port through which to connect (typically, this is 25 for non-TLS and 465 or 587 for TLS servers).
+    - *TLS* should indicate whether a secure TLS connection should be used (1) or not (0).
+    - *User* is the user to connect to the SMTP server.
+    - *Password*, well, again, holds the according password.
+    - *Sender* is the sender's email address to be used for emails.
+    - *Recipient* is the recipient's email address to be informed when the scraping process is over.
 - Google
     - *Sectors* specifies the complete (!) URL of the downloadable Google Sheet that holds the sectors. This can be acquired through making the sheet publicly available to everyone with the URL (Google teminology: "share"), copying/pasting the URL, and appending a `&output=csv` at the end.
     - *Sectors_have_headers* defines whether the sectors' first row should be skipped.
