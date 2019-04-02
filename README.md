@@ -58,7 +58,7 @@ Change the config file to work with your domain of study. It follows a strict [I
 ### Database
 All database communication is handled through [SQLAlchemy](https://docs.sqlalchemy.org/en/latest/), meaning that you can put a variety of SQL-based database infrastructures below it. Default's to MySQL, however.
 
-The main storage, then, consists of three tables:
+The main storage, then, consists of the following tables:
 - *Sector* specifies the hierarchical tree structure of sectors to which outlets belong.
 - *Outlet* holds the later-to-be-visualized starting points (i.e., nodes) including their geographical positions and an initial URL.
 - *Scrape* holds one entry per actual website scraping process. The time it takes for a website to be loaded is logged into this table as well (_seconds_elapsed_). Initial scrapes are also linked to their corresponding outlet elements.
