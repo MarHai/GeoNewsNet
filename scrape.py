@@ -96,7 +96,7 @@ class Scraper(threading.Thread):
 def recursively_add_links_to_queue(queue, current_level, links_from_current_level, max_depth):
     links_actually_added_to_queue = 0
     for link in links_from_current_level:
-        if link.scrape_target is None:
+        if link.scrape_target is None or link.scrape_target.status_code != 200:
             queue.put(link)
             links_actually_added_to_queue = links_actually_added_to_queue + 1
         else:
