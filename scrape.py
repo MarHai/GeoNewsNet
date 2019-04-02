@@ -20,7 +20,8 @@ class Scraper(threading.Thread):
         while True:
             content = self._queue.get()
             if isinstance(content, str) and content == 'quit':
-                print('  - worker #%d hereby resigns from his/her duties' % threading.get_ident())
+                self._db.close()
+                log('  - worker #%d hereby resigns from his/her duties' % threading.get_ident(), self._logfile)
                 break
             elif isinstance(content, Outlet):
                 scrape_tmp = self.scrape(content.url)

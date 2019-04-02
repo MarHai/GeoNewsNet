@@ -35,7 +35,6 @@ def get_engine(config):
                 '/' + config.get('Database', 'database', fallback='geonewsnet') + \
                 '?charset=utf8'
     print('- connecting to %s' % connector)
-    database_timeout = -1
     try:
         database_timeout = int(config.get('Database', 'timeout', fallback=-1))
         if database_timeout > 0:
@@ -43,7 +42,7 @@ def get_engine(config):
     except:
         database_timeout = -1
     try:
-        return create_engine(connector, encoding='utf8', pool_recycle=database_timeout)
+        return create_engine(connector, encoding='utf8', pool_recycle=database_timeout, max_overflow=-1)
     except:
         die_with_error('Database engine could not be created')
 
