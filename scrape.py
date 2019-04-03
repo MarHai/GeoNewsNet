@@ -5,6 +5,8 @@ from queue import Queue
 from database import Outlet, Scrape, Link, ScrapeError
 from sqlalchemy import or_, func
 from statistics import mean, stdev
+import sys
+import traceback
 
 
 class Scraper(threading.Thread):
@@ -12,17 +14,16 @@ class Scraper(threading.Thread):
         threading.Thread.__init__(self)
         self._queue = queue
         self._config = config
-        self._logfile = None
         # to be thread-safe, we use a fresh scoped session, which gets initiated here
         self._db = get_database(db_engine)
 
     def run(self):
-        self._logfile = log('  - worker #%d set up' % threading.get_ident())
+        log('Worker set up', str(threading.get_ident()))
         while True:
             content = self._queue.get()
             if isinstance(content, str) and content == 'quit':
                 self._db.close()
-                log('  - worker #%d hereby resigns from his/her duties' % threading.get_ident(), self._logfile)
+                log('Worker resigns from duties', str(threading.get_ident()))
                 break
             elif isinstance(content, Outlet):
                 scrape_tmp = self.scrape(content.url)
@@ -91,6 +92,12 @@ class Scraper(threading.Thread):
             for link_existent in links_existent:
                 link_existent.increase_errors()
             self._db.commit()
+        except:
+            error = sys.exc_info()
+            if error is not None and error[0] is not None:
+                log('Error Occurred', ('%s \n\n %s' % (str(error[0]), traceback.format_exc())), True)
+            else:
+                log('Error Occurred', traceback.format_exc(), True)
         return False
 
 
@@ -109,49 +116,45 @@ def recursively_add_links_to_queue(queue, current_level, links_from_current_leve
             (links_actually_added_to_queue, len(links_from_current_level), current_level))
 
 
-def log(msg, file=None):
-    if file is None:
-        filename = 'geonewsnet.log'
-        file = open(filename, 'a')
-        log('%s opened as logfile' % filename, file)
-    file.write(msg + '\n')
-    print(msg)
-    return file
+def log(gist, msg, very_important_msg=False):
+    print(('%s: %s' % (gist, msg)) if len(msg) < 80 else gist)
+    if very_important_msg:
+        send_email(config,
+                   '[GeoNewsNet] %s' % gist,
+                   'Hi there!\n\n%s\n\n%s\n' % (gist, msg)
+                   )
 
 
 if __name__ == '__main__':
     t0 = time()
 
-    logfile = log('GeoNewsNet v2')
-    log('https://github.com/MarHai/GeoNewsNet', logfile)
-    log('(c) 2019 by Mario Haim <mario@haim.it>', logfile)
-    log('---------', logfile)
+    log('GeoNewsNet v2', 'https://github.com/MarHai/GeoNewsNet')
+    log('(c) 2019', 'Mario Haim <mario@haim.it>')
 
     config = get_config()
     db_engine = get_engine(config)
     db = get_database(db_engine)
     queue = Queue()
     threads = []
-    log('---------', logfile)
 
     workers = int(config.get('Scraper', 'threads', fallback=4))
     max_depth = int(config.get('Scraper', 'depth', fallback=1))
 
-    for round in range(max_depth+1):
-        log(':: Round %d of %d' % (round+1, max_depth+1), logfile)
+    for i in range(max_depth + 1):
+        log('%d of %d' % (i + 1, max_depth + 1), 'Round of scraping started with %d parallel scrapers' % workers)
 
-        log('  Creating %d parallel scrapers' % workers, logfile)
-        for i in range(workers):
+        for j in range(workers):
             worker = Scraper(queue, config, db_engine)
             worker.start()
             threads.append(worker)
 
-        log('  Collecting all URLs to be scraped', logfile)
         outlets = db.query(Outlet).filter(Outlet.scrape_uid.is_(None)).all()
+        outlet_string = ''
         for outlet in outlets:
             queue.put(outlet)
+            outlet_string = outlet_string + str(outlet) + '\n'
         if len(outlets) > 0:
-            log('  - added %d outlets (nodes) to the list' % len(outlets), logfile)
+            log('%d outlets (nodes) added to scraper' % len(outlets), outlet_string, True)
 
         # for all Outlet-related Scrape objects (level=1), start the recursive process for all Link objects (level=2)
         if max_depth > 1:
@@ -160,29 +163,34 @@ if __name__ == '__main__':
                 Scrape.uid == Outlet.scrape_uid,
                 Outlet.scrape_uid.isnot(None)
             ).all()
-            recursively_add_links_to_queue(queue, 2, links, max_depth)
+            links_actually_added_to_queue = recursively_add_links_to_queue(queue, 2, links, max_depth)
+            if links_actually_added_to_queue > 0:
+                log(
+                    '%d not-yet-visited links added to scraper' % links_actually_added_to_queue,
+                    'Maximum depth is %d' % max_depth,
+                    True
+                )
 
         for worker in threads:
             queue.put('quit')
         for worker in threads:
             worker.join()
-    log('---------', logfile)
 
     log('Everything done, here are some descriptive statistics:', logfile)
     scrape_total = db.query(func.count(Scrape.uid)).one()[0]
     scrape_successful = db.query(func.count(Scrape.uid)).filter(Scrape.status_code == 200).one()[0]
-    log('- %d websites scraped, %d of which (%d%%) were successful (i.e., status code 200)' %
-        (scrape_total, scrape_successful, (0 if scrape_total == 0 else 100*scrape_successful/scrape_total)),
-        logfile)
+    statistics = '%d websites scraped, %d of which (%d%%) were successful (i.e., status code 200)' % \
+                 (scrape_total, scrape_successful, (0 if scrape_total == 0 else 100*scrape_successful/scrape_total))
     scrape_host_result = db.query(func.count(Link.uid)).group_by(Link.fld_origin)
     if scrape_host_result.count() == 0:
-        log('- no hosts scraped', logfile)
+        statistics += '\n' + 'no hosts scraped'
     else:
         scrape_min_documents = min(count[0] for count in scrape_host_result.all())
         scrape_max_documents = max(count[0] for count in scrape_host_result.all())
-        log('- %d hosts scraped, containing between %d and %d documents' %
-            (scrape_host_result.count(), scrape_min_documents, scrape_max_documents),
-            logfile)
+        statistics += '\n' + (
+                '%d hosts scraped, containing between %d and %d documents' %
+                (scrape_host_result.count(), scrape_min_documents, scrape_max_documents)
+        )
     try:
         links_internal = db.query(func.count(Link.uid)).filter(Link.is_internal).one()[0]
         links_external = db.query(func.count(Link.uid)).filter(Link.is_internal.is_(False)).one()[0]
@@ -190,30 +198,41 @@ if __name__ == '__main__':
         links_internal = 0
         links_external = 0
     links_total = links_internal + links_external
-    log('- %d links collected, %d of which are external (%d%%)' %
-        (links_total, links_external, (0 if links_total == 0 else 100*links_external/links_total)),
-        logfile)
-    links_outlet = db.query(func.count(Link.uid)).outerjoin(Outlet, Link.scrape_target_uid == Outlet.scrape_uid).filter(
-        Link.is_internal.is_(False),
-        Link.scrape_target_uid.isnot(None)
-    ).one()[0]
-    log('- %d external links (%d%% out of %d external links) link to pre-configured outlets' %
-        (links_outlet, (0 if links_external == 0 else 100*links_outlet/links_external), links_external),
-        logfile)
+    statistics += '\n' + (
+            '%d links collected, %d of which are external (%d%%)' %
+            (links_total, links_external, (0 if links_total == 0 else 100 * links_external / links_total))
+    )
+    links_outlet_direct = db.query(Link.uid, Outlet.uid).filter(
+        Link.scrape_target_uid == Outlet.scrape_uid,
+        Link.is_internal.is_(False)
+    ).count()
+    statistics += '\n' + (
+            '%d external links (%d%% out of %d external links) link directly to pre-configured outlet pages' % (
+                links_outlet_direct,
+                (0 if links_external == 0 else (100 * links_outlet_direct / links_external)),
+                links_external
+            )
+    )
+    links_outlet_host = db.query(Link.uid, Outlet.uid).filter(
+        Link.fld_target == Outlet.fld,
+        Link.is_internal.is_(False)
+    ).count()
+    statistics += '\n' + (
+            '%d external links (%d%% out of %d external links) link to outlet hosts' % (
+                links_outlet_host,
+                (0 if links_external == 0 else (100 * links_outlet_host / links_external)),
+                links_external
+            )
+    )
     scrape_link_result = db.query(func.count(Link.uid)).group_by(Link.scrape_origin_uid)
     if scrape_link_result.count() > 1:
         mean_number_of_links = mean(count[0] for count in scrape_link_result.all())
         sd_number_of_links = stdev(count[0] for count in scrape_link_result.all())
-        log('- on average, scrapes resulted in M = %.1f links (SD = %.1f)' % (mean_number_of_links, sd_number_of_links))
+        statistics += '\n' + (
+                'on average, scrapes resulted in M = %.1f links (SD = %.1f)' %
+                (mean_number_of_links, sd_number_of_links)
+        )
         below_10_number_of_links = sum((1 if count[0] < 10 else 0) for count in scrape_link_result.all())
-        log('- %d scrapes have less than 10 links' % below_10_number_of_links)
-    log('---------', logfile)
+        statistics += '\n' + ('%d scrapes have less than 10 links' % below_10_number_of_links)
 
-    timediff = time() - t0
-    log('Done in %.2f seconds' % timediff, logfile)
-    send_email(config,
-               '[GeoNewsNet] Scrape Process Finished',
-               ('Hi,\n\nthe running scrape process has just finished after %.2f seconds.\n' +
-                'Please find the full logfile attached.\n\n' +
-                'Thanks for using our tools,\nMario\n') % timediff,
-               [logfile.name])
+    log('Scrape done in %.2f seconds' % (time() - t0), statistics + '\n', True)
