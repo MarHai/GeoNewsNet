@@ -234,7 +234,7 @@ if __name__ == '__main__':
     links_outlet_direct = db.query(Link.uid, Outlet.uid).filter(
         Link.scrape_target_uid == Outlet.scrape_uid,
         Link.is_internal.is_(False)
-    ).count()
+    ).group_by(Link.uid).count()
     statistics += '\n' + (
             '%d external links (%d%% out of %d external links) link directly to pre-configured outlet pages' % (
                 links_outlet_direct,
@@ -245,7 +245,7 @@ if __name__ == '__main__':
     links_outlet_host = db.query(Link.uid, Outlet.uid).filter(
         Link.fld_target == Outlet.fld,
         Link.is_internal.is_(False)
-    ).count()
+    ).group_by(Link.uid).count()
     statistics += '\n' + (
             '%d external links (%d%% out of %d external links) link to outlet hosts' % (
                 links_outlet_host,
