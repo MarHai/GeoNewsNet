@@ -253,7 +253,9 @@ if __name__ == '__main__':
                 links_external
             )
     )
-    scrape_link_result = db.query(func.count(Link.uid)).group_by(Link.scrape_origin_uid)
+    scrape_link_result = db.query(func.count(Link.uid))\
+        .filter(Link.scrape_origin_uid == Scrape.uid, Scrape.status_code == 200)\
+        .group_by(Link.scrape_origin_uid)
     if scrape_link_result.count() > 1:
         mean_number_of_links = mean(count[0] for count in scrape_link_result.all())
         sd_number_of_links = stdev(count[0] for count in scrape_link_result.all())
@@ -262,6 +264,6 @@ if __name__ == '__main__':
                 (mean_number_of_links, sd_number_of_links)
         )
         below_10_number_of_links = sum((1 if count[0] < 10 else 0) for count in scrape_link_result.all())
-        statistics += '\n' + ('%d scrapes have less than 10 links' % below_10_number_of_links)
+        statistics += '\n' + ('%d status-200 scrapes have less than 10 links' % below_10_number_of_links)
 
     log('Scrape done in %.2f seconds' % (time() - t0), statistics + '\n', True)
