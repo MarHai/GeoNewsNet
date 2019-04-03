@@ -65,7 +65,7 @@ def import_sectors(config, db):
         try:
             response = requests.get(sheet)
             if response.status_code == 200:
-                csv_raw = response.content.decode('utf-8')
+                csv_raw = response.content.decode('utf8')
                 csv_list = csv_raw.splitlines()
                 csv_data = csv.DictReader(csv_list,
                                           fieldnames=['parent', 'name'],
@@ -112,7 +112,7 @@ def import_outlets(config, db):
         try:
             response = requests.get(sheet)
             if response.status_code == 200:
-                csv_raw = response.content.decode('utf-8')
+                csv_raw = response.content.decode('utf8')
                 csv_list = csv_raw.splitlines()
                 csv_data = csv.DictReader(csv_list,
                                           fieldnames=['url', 'name', 'area',

@@ -179,7 +179,7 @@ class Outlet(base):
         level = level.lower()
         if level == 'national':
             return 'National'
-        elif level == 'local‎/regional':
+        elif level == 'local/regional':
             return 'Local/Regional'
         elif level == '':
             warnings.warn('No level specified')
