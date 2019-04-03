@@ -104,16 +104,42 @@ class Scraper(threading.Thread):
 def recursively_add_links_to_queue(queue, current_level, links_from_current_level, max_depth):
     links_actually_added_to_queue = 0
     for link in links_from_current_level:
-        if link.scrape_target is None or link.scrape_target.status_code != 200:
+        if link.scrape_target is None:
+            # there is currently no target scrape set for this link
+            scrape_existent = db.query(Scrape).filter(
+                or_(Scrape.url_started == link.url_target, Scrape.url_finished == link.url_target),
+                Scrape.status_code == 200
+            ).order_by(Scrape.created).first()
+            if scrape_existent is not None:
+                # target scrape found, updating link entry (no actual scraping takes place)
+                link = db.query(Link).filter(Link.uid == link.uid).one()
+                link.scrape_target_uid = scrape_existent.uid
+                db.commit()
+                if current_level < max_depth:
+                    links_actually_added_to_queue += recursively_add_links_to_queue(
+                        queue,
+                        current_level + 1,
+                        db.query(Link).filter(Link.scrape_origin_uid == link.scrape_target_uid).all(),
+                        max_depth
+                    )
+            else:
+                # due to multi-threading, we double-checked, but there is still no target scrape found
+                queue.put(link)
+                links_actually_added_to_queue += 1
+        elif link.scrape_target.status_code != 200:
+            # target scrape already exists but was not successful (new scrape initiated)
             queue.put(link)
-            links_actually_added_to_queue = links_actually_added_to_queue + 1
+            links_actually_added_to_queue += 1
         else:
+            # target scrape found (no actual scraping takes place)
             if current_level < max_depth:
-                links = db.query(Link).filter(Link.scrape_origin_uid == link.scrape_target_uid).all()
-                recursively_add_links_to_queue(queue, current_level + 1, links, max_depth)
-    if links_actually_added_to_queue > 0:
-        log('  - added %d not-yet-visited out of %d potential link targets on level %d to the list' %
-            (links_actually_added_to_queue, len(links_from_current_level), current_level))
+                links_actually_added_to_queue += recursively_add_links_to_queue(
+                    queue,
+                    current_level + 1,
+                    db.query(Link).filter(Link.scrape_origin_uid == link.scrape_target_uid).all(),
+                    max_depth
+                )
+    return links_actually_added_to_queue
 
 
 def log(gist, msg, very_important_msg=False):
@@ -176,7 +202,10 @@ if __name__ == '__main__':
         for worker in threads:
             worker.join()
 
-    log('Everything done, here are some descriptive statistics:', logfile)
+        db.commit()
+        db.close()
+        db = get_database(db_engine)
+
     scrape_total = db.query(func.count(Scrape.uid)).one()[0]
     scrape_successful = db.query(func.count(Scrape.uid)).filter(Scrape.status_code == 200).one()[0]
     statistics = '%d websites scraped, %d of which (%d%%) were successful (i.e., status code 200)' % \
