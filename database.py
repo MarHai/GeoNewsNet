@@ -78,6 +78,8 @@ class Scrape(base):
         from urllib3.connectionpool import InsecureRequestWarning
         # this is generally not advisable at all and legitimately raises lots of insecurity warnings
         # having said that, we do not want to see all these (completely legit but redundant) warnings
+        from urllib3 import disable_warnings
+        disable_warnings()
         with warnings.catch_warnings():
             warnings.filterwarnings('ignore', category=InsecureRequestWarning)
             response = requests.get(url, headers=browser_header, verify=False)
