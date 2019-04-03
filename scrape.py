@@ -95,9 +95,9 @@ class Scraper(threading.Thread):
         except:
             error = sys.exc_info()
             if error is not None and error[0] is not None:
-                log('Error Occurred', ('%s \n\n %s' % (str(error[0]), traceback.format_exc())), True)
+                log('Error Occurred with %s' % url, ('%s \n\n %s' % (str(error[0]), traceback.format_exc())), True)
             else:
-                log('Error Occurred', traceback.format_exc(), True)
+                log('Error Occurred with %s' % url, traceback.format_exc(), True)
         return False
 
 
