@@ -23,7 +23,7 @@ class Scrape(base):
     url_started = Column(Text, nullable=False)
     url_finished = Column(Text)
     status_code = Column(Integer)
-    seconds_elapsed = Column(Numeric(10, 8), nullable=False)
+    seconds_elapsed = Column(Numeric(12, 8), nullable=False)
     outlet = relationship('Outlet', back_populates='scrape')
     links_outgoing = relationship(
         'Link',
