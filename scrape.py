@@ -21,19 +21,21 @@ class Scraper(threading.Thread):
         log('Worker set up', str(threading.get_ident()))
         while True:
             content = self._queue.get()
-            if isinstance(content, str) and content == 'quit':
+            if content == 'quit':
                 self._db.close()
                 log('Worker resigns from duties', str(threading.get_ident()))
                 break
-            elif isinstance(content, Outlet):
-                scrape_tmp = self.scrape(content.url)
+            elif content.startswith('outlet:'):
+                (type, id, url) = content.split(':', 2)
+                scrape_tmp = self.scrape(url)
                 if scrape_tmp:
                     # re-query Scrape for thread safety
-                    outlet_tmp = self._db.query(Outlet).filter(Outlet.uid == content.uid).one()
+                    outlet_tmp = self._db.query(Outlet).filter(Outlet.uid == int(id)).one()
                     outlet_tmp.scrape = scrape_tmp
                     self._db.commit()
-            elif isinstance(content, Link):
-                self.scrape(content.url_target)
+            elif content.startswith('link:'):
+                (type, id, url) = content.split(':', 2)
+                self.scrape(url)
 
     def scrape(self, url):
         """Requests url and extracts links. A Scrape and several 1:n-linked Link objects are created.
@@ -101,6 +103,15 @@ class Scraper(threading.Thread):
         return False
 
 
+def add_to_queue(queue, object_to_append):
+    if isinstance(object_to_append, Outlet):
+        queue.put('outlet:' + str(object_to_append.uid) + ':' + object_to_append.url)
+    elif isinstance(object_to_append, Link):
+        queue.put('link:' + str(object_to_append.uid) + ':' + object_to_append.url_target)
+    else:
+        queue.put(object_to_append)
+
+
 def recursively_add_links_to_queue(queue, current_level, links_from_current_level, max_depth):
     links_actually_added_to_queue = 0
     for link in links_from_current_level:
@@ -124,11 +135,11 @@ def recursively_add_links_to_queue(queue, current_level, links_from_current_leve
                     )
             else:
                 # due to multi-threading, we double-checked, but there is still no target scrape found
-                queue.put(link)
+                add_to_queue(queue, link)
                 links_actually_added_to_queue += 1
         elif link.scrape_target.status_code != 200:
             # target scrape already exists but was not successful (new scrape initiated)
-            queue.put(link)
+            add_to_queue(queue, link)
             links_actually_added_to_queue += 1
         else:
             # target scrape found (no actual scraping takes place)
@@ -177,7 +188,7 @@ if __name__ == '__main__':
         outlets = db.query(Outlet).filter(Outlet.scrape_uid.is_(None)).all()
         outlet_string = ''
         for outlet in outlets:
-            queue.put(outlet)
+            add_to_queue(queue, outlet)
             outlet_string = outlet_string + str(outlet) + '\n'
         if len(outlets) > 0:
             log('%d outlets (nodes) added to scraper' % len(outlets), outlet_string, True)
@@ -198,7 +209,7 @@ if __name__ == '__main__':
                 )
 
         for worker in threads:
-            queue.put('quit')
+            add_to_queue(queue, 'quit')
         for worker in threads:
             worker.join()
 
