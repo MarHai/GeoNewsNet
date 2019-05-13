@@ -15,7 +15,9 @@ class Scraper(threading.Thread):
         self._queue = queue
         self._config = config
         # to be thread-safe, we use a fresh scoped session, which gets initiated here
-        self._db = get_database(db_engine)
+        self._db = get_database(db_engine, do_not_die=True)
+        if self._db is None:
+            log('Thread initiation failed', 'Major DB connection error (see log)', True)
 
     def run(self):
         log('Worker set up', str(threading.get_ident()))
@@ -158,8 +160,8 @@ def log(gist, msg, very_important_msg=False):
     if very_important_msg:
         send_email(config,
                    '[GeoNewsNet] %s' % gist,
-                   'Hi there!\n\n%s\n\n%s\n' % (gist, msg)
-                   )
+                   'Hi there!\n\n%s\n\n%s\n' % (gist, msg),
+                   do_not_die=True)
 
 
 if __name__ == '__main__':

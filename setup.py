@@ -16,7 +16,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
 
-def get_config(ini_file='config.ini'):
+def get_config(ini_file='config.ini', do_not_die=False):
     config = configparser.RawConfigParser()
     print('- reading %s' % ini_file)
     try:
@@ -24,10 +24,14 @@ def get_config(ini_file='config.ini'):
         print('- read %d sections successfully: %s' % (len(config.sections()), config.sections()))
         return config
     except:
-        die_with_error('%s could not be read' % ini_file)
+        if do_not_die:
+            present_error('%s could not be read' % ini_file)
+            return None
+        else:
+            die_with_error('%s could not be read' % ini_file)
 
 
-def get_engine(config):
+def get_engine(config, do_not_die=False):
     connector = config.get('Database', 'dialect', fallback='mysql+pymysql') + \
                 '://' + config.get('Database', 'user', fallback='root') + \
                 ':' + config.get('Database', 'password', fallback='password') + \
@@ -44,10 +48,14 @@ def get_engine(config):
     try:
         return create_engine(connector, encoding='utf8', pool_recycle=database_timeout, max_overflow=-1)
     except:
-        die_with_error('Database engine could not be created')
+        if do_not_die:
+            present_error('Database engine could not be created')
+            return None
+        else:
+            die_with_error('Database engine could not be created')
 
 
-def get_database(engine):
+def get_database(engine, do_not_die=False):
     try:
         session_factory = sessionmaker(bind=engine)
         db = scoped_session(session_factory)
@@ -55,7 +63,11 @@ def get_database(engine):
         db.execute('SET CHARACTER SET "UTF8"')
         return db
     except:
-        die_with_error('Database session could not be initiated')
+        if do_not_die:
+            present_error('Database session could not be initiated')
+            return None
+        else:
+            die_with_error('Database session could not be initiated')
 
 
 def import_sectors(config, db):
@@ -172,7 +184,7 @@ def get_browser_header(config):
     }
 
 
-def get_mailer(config):
+def get_mailer(config, do_not_die=False):
     use_tls = True if config.get('Email', 'tls', fallback=0) else False
     host = config.get('Email', 'host')
     port = int(config.get('Email', 'port', fallback=(465 if use_tls else 25)))
@@ -188,11 +200,15 @@ def get_mailer(config):
             server = smtplib.SMTP_SSL(host, port, context=context)
         server.login(config.get('Email', 'user'), config.get('Email', 'password'))
     except:
-        die_with_error('connection to SMTP server failed')
+        if do_not_die:
+            present_error('connection to SMTP server failed')
+            return None
+        else:
+            die_with_error('connection to SMTP server failed')
     return server
 
 
-def send_email(config, subject, message, attachments=None):
+def send_email(config, subject, message, attachments=None, do_not_die=False):
     sender = config.get('Email', 'sender')
     recipient = config.get('Email', 'recipient')
     print('- attempting to send an email ("%s") to %s' % (subject, recipient))
@@ -215,9 +231,13 @@ def send_email(config, subject, message, attachments=None):
                 print('- "%s" could not be attached to email' % attachment)
     try:
         mailer = get_mailer(config)
-        mailer.sendmail(sender, recipient, msg.as_string())
+        if mailer is not None:
+            mailer.sendmail(sender, recipient, msg.as_string())
     except:
-        die_with_error('email could not be sent')
+        if do_not_die:
+            present_error('email could not be sent')
+        else:
+            die_with_error('email could not be sent')
 
 
 def check_request(url='https://haim.it'):
@@ -242,12 +262,16 @@ def check_request(url='https://haim.it'):
         die_with_error('Test request to %s did not work' % url)
 
 
-def die_with_error(msg):
+def present_error(msg):
     print('- ERROR: %s' % msg)
     error = sys.exc_info()[0]
     if error is not None:
         print('- ' + str(error))
         print('- ' + traceback.format_exc())
+
+
+def die_with_error(msg):
+    present_error(msg)
     exit(1)
 
 
