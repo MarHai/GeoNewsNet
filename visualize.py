@@ -28,7 +28,8 @@ class GephiCreator:
         for key, value in vars(outlet).items():
             if not key.startswith('_'):
                 # Gephi cannot handle Decimal objects, so we force it to string
-                data_from_outlet[key] = str(value) if isinstance(value, Decimal) else value
+                # data_from_outlet[key] = str(value) if isinstance(value, Decimal) else value
+                data_from_outlet[key] = str(value)
         data_from_outlet['n_unique_internal'] = self._count_internal_links(outlet.scrape)
         if data_from_outlet['n_unique_internal'] == 0:
             warnings.warn('Host %s does not have any internal links, which affects link-ratio calculation' % outlet.fld)
@@ -80,6 +81,9 @@ class GephiCreator:
     def count_outlets(self):
         return self._graph.number_of_nodes()
 
+    def get_outlets(self):
+        return self._nodes
+
     def write_gexf(self, file):
         networkx.write_gexf(self._graph, file)
 
@@ -118,6 +122,12 @@ if __name__ == '__main__':
         os.makedirs(directory)
         print('- directory %s for resulting charts created' % directory)
     filename = 'chart_%s.gexf' % datetime.now().strftime('%Y-%m-%d_%H-%M')
+
+    print('- attempting to write nodes to %s%s' % (directory, filename.replace('.gexf', '.txt')))
+    with open(directory + filename.replace('.gexf', '.txt'), 'w') as f:
+        for item in chart.get_outlets():
+            f.write('%s\n' % item)
+
     print('- attempting to finally create the chart file as %s%s' % (directory, filename))
     chart.write_gexf(directory + filename)
 
